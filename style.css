@@ -1,0 +1,47 @@
+body { background-color: #0f172a; font-family: 'Inter', sans-serif; color: #e2e8f0; }
+
+.glass-panel {
+    background: rgba(30, 41, 59, 0.6);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 1rem;
+    transition: all 0.3s ease;
+}
+
+.clickable-card { cursor: pointer; user-select: none; transition: all 0.3s ease; }
+
+/* EFEITOS NEON (Hover) */
+#card-receita:hover { box-shadow: 0 0 15px rgba(16, 185, 129, 0.3); border-color: rgba(16, 185, 129, 0.5); transform: translateY(-3px); }
+#card-despesa:hover { box-shadow: 0 0 15px rgba(239, 68, 68, 0.3); border-color: rgba(239, 68, 68, 0.5); transform: translateY(-3px); }
+#card-saldo:hover { box-shadow: 0 0 15px rgba(59, 130, 246, 0.3); border-color: rgba(59, 130, 246, 0.5); transform: translateY(-3px); }
+
+/* Estados Ativos */
+.clickable-card.active { background: rgba(59, 130, 246, 0.15); border-color: #3b82f6; box-shadow: 0 0 15px rgba(59, 130, 246, 0.2); transform: scale(1.01); }
+.clickable-card.inactive { opacity: 0.5; filter: blur(1px) grayscale(0.6); transform: scale(0.98); }
+
+/* Botões de Conta */
+.btn-conta { cursor: pointer; transition: all 0.2s; border: 1px solid transparent; }
+.btn-conta.conta-pos:hover { border-color: #10b981; box-shadow: 0 0 10px rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.1); }
+.btn-conta.conta-neg:hover { border-color: #ef4444; box-shadow: 0 0 10px rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.1); }
+.btn-conta.active { border-color: #3b82f6; background: rgba(59, 130, 246, 0.2); box-shadow: 0 0 15px rgba(59, 130, 246, 0.4); }
+
+.progress-fill { transition: width 1s ease-in-out, background-color 0.3s, box-shadow 0.3s; }
+.neon-bar-green { box-shadow: 0 0 6px #10b981, 0 0 12px rgba(16, 185, 129, 0.3); }
+.neon-bar-yellow { box-shadow: 0 0 6px #f59e0b, 0 0 12px rgba(245, 158, 11, 0.3); }
+.neon-bar-red { box-shadow: 0 0 6px #ef4444, 0 0 12px rgba(239, 68, 68, 0.3); }
+
+/* Select Style */
+select {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%239ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.5rem center;
+    background-repeat: no-repeat;
+    background-size: 1.5em 1.5em;
+    appearance: none;
+}
+
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.spin-anim { animation: spin 1s linear infinite; }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: #1e293b; }
+::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
