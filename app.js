@@ -1,4 +1,4 @@
-const LINK_PLANILHA = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQaHmdvWk9wLHdclkmL6DN4UugjOxBF-HeOWvU91bOmvbC6ZYl4TAfXZ-6mzLEfMiddw95qOtuhr2_J/pub?output=csv";
+const LINK_PLANILHA = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSfCcZKmD6tFo4_iNCegvJsul9iKvkquEaVfFzYLLHscG7THHUS0C1Wvi6DzaY8sXmsLL1Egqhe7kFe/pub?output=csv";
 
 let state = {
     dadosBrutos: [], dadosFiltrados: [], meta: 2000,
@@ -246,4 +246,5 @@ function toggleMenu() {
     menu.classList.toggle('hidden');
     // Adiciona classe flex para garantir layout correto quando visível
     menu.classList.toggle('flex');
+
 }
