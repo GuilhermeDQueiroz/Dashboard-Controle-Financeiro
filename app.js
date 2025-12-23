@@ -1,4 +1,6 @@
-const LINK_PLANILHA = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSfCcZKmD6tFo4_iNCegvJsul9iKvkquEaVfFzYLLHscG7THHUS0C1Wvi6DzaY8sXmsLL1Egqhe7kFe/pub?output=csv";
+//const LINK_PLANILHA = "";
+// Planilha de Demonstração (Padrão)
+const DEMO_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQaHmdvWk9wLHdclkmL6DN4UugjOxBF-HeOWvU91bOmvbC6ZYl4TAfXZ-6mzLEfMiddw95qOtuhr2_J/pub?output=csv";
 
 let state = {
     dadosBrutos: [], dadosFiltrados: [], meta: 2000,
@@ -51,13 +53,74 @@ async function sincronizarDados() {
     }
 }
 
-async function carregarDados(forceRefresh = false) {
+/*async function carregarDados(forceRefresh = false) {
     const timestamp = forceRefresh ? `&t=${new Date().getTime()}` : '';
     const finalUrl = "https://corsproxy.io/?" + encodeURIComponent(LINK_PLANILHA + timestamp);
     try {
         const res = await fetch(finalUrl);
         if (res.ok) { processarCSV(await res.text()); } else { throw new Error("Falha na conexão"); }
     } catch (e) { console.error(e); alert("Erro de conexão."); }
+}*/
+
+async function carregarDados(forceRefresh = false) {
+    // Verifica se o usuário salvou uma URL, senão usa a DEMO
+    const userUrl = localStorage.getItem('finance_url');
+    const targetUrl = userUrl ? userUrl : DEMO_URL;
+
+    // Feedback visual se estiver em modo Demo (Opcional)
+    if (!userUrl) {
+        console.log("Usando planilha Demo");
+    }
+
+    const timestamp = forceRefresh ? `&t=${new Date().getTime()}` : '';
+    const finalUrl = "https://corsproxy.io/?" + encodeURIComponent(targetUrl + timestamp);
+
+    try {
+        const res = await fetch(finalUrl);
+        if (res.ok) {
+            processarCSV(await res.text());
+        } else {
+            throw new Error("Falha na conexão");
+        }
+    } catch (e) {
+        console.error(e);
+        alert("Erro ao carregar dados. Verifique o link nas configurações.");
+    }
+}
+
+// --- Funções de Configuração ---
+function abrirConfig() {
+    const currentUrl = localStorage.getItem('finance_url') || '';
+    document.getElementById('cfg-url').value = currentUrl;
+    document.getElementById('modal-config').classList.remove('hidden');
+}
+
+function fecharConfig() {
+    document.getElementById('modal-config').classList.add('hidden');
+}
+
+function salvarConfig() {
+    const url = document.getElementById('cfg-url').value.trim();
+    if (url) {
+        localStorage.setItem('finance_url', url);
+        location.reload(); // Recarrega para aplicar a nova planilha
+    }
+}
+
+/*function resetarConfig() {
+    if (confirm("Deseja voltar para a planilha de demonstração?")) {
+        localStorage.removeItem('finance_url');
+        location.reload();
+    }
+}*/
+
+function resetarConfig() {
+    // Em vez de apagar e perguntar, nós salvamos a URL de DEMO explicitamente
+    localStorage.setItem('finance_url', DEMO_URL);
+
+    // Recarregamos a página. 
+    // Agora o 'init()' vai encontrar uma URL salva e NÃO abrirá o modal.
+    location.reload();
 }
 
 function processarCSV(csvText) {
@@ -214,21 +277,135 @@ function atualizarUI() {
 }
 
 function renderizarGraficos(catMap, evoMap, mensalMap) {
-    Chart.defaults.color = '#94a3b8'; Chart.defaults.borderColor = '#334155';
+    Chart.defaults.color = '#94a3b8';
+    Chart.defaults.borderColor = '#334155';
+
+    // --- Gráfico Mensal (Barras) ---
     const meses = Object.keys(mensalMap).sort((a, b) => mensalMap[a].sortKey - mensalMap[b].sortKey);
     const bgR = meses.map(m => state.filtros.mesEspecifico && m !== state.filtros.mesEspecifico ? 'rgba(16, 185, 129, 0.2)' : '#10b981');
     const bgD = meses.map(m => state.filtros.mesEspecifico && m !== state.filtros.mesEspecifico ? 'rgba(239, 68, 68, 0.2)' : '#ef4444');
+
     if (state.charts.mensal) state.charts.mensal.destroy();
-    state.charts.mensal = new Chart(document.getElementById('chartMensal'), { type: 'bar', data: { labels: meses, datasets: [{ label: 'Receitas', data: meses.map(m => mensalMap[m].r), backgroundColor: bgR }, { label: 'Despesas', data: meses.map(m => mensalMap[m].d), backgroundColor: bgD }] }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { x: { grid: { display: false } }, y: { beginAtZero: true, grid: { color: '#334155' } } }, onClick: (e, el) => { if (el.length) setFiltroInterativo('mesEspecifico', meses[el[0].index]); } } });
+    state.charts.mensal = new Chart(document.getElementById('chartMensal'), {
+        type: 'bar',
+        data: {
+            labels: meses,
+            datasets: [
+                { label: 'Receitas', data: meses.map(m => mensalMap[m].r), backgroundColor: bgR },
+                { label: 'Despesas', data: meses.map(m => mensalMap[m].d), backgroundColor: bgD }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            scales: { x: { grid: { display: false } }, y: { beginAtZero: true, grid: { color: '#334155' } } },
+            onClick: (e, el) => { if (el.length) setFiltroInterativo('mesEspecifico', meses[el[0].index]); }
+        }
+    });
+
+    // --- Gráfico de Categorias (Donut) com Porcentagem ---
     if (state.charts.cat) state.charts.cat.destroy();
-    state.charts.cat = new Chart(document.getElementById('chartCategorias'), { type: 'doughnut', data: { labels: Object.keys(catMap), datasets: [{ data: Object.values(catMap), backgroundColor: ['#ef4444', '#f97316', '#eab308', '#84cc16', '#14b8a6', '#06b6d4', '#6366f1'], borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } }, onClick: (e, el) => { if (el.length) setFiltroInterativo('categoria', Object.keys(catMap)[el[0].index]); } } });
+    state.charts.cat = new Chart(document.getElementById('chartCategorias'), {
+        type: 'doughnut',
+        data: {
+            labels: Object.keys(catMap),
+            datasets: [{
+                data: Object.values(catMap),
+                backgroundColor: ['#ef4444', '#f97316', '#eab308', '#84cc16', '#14b8a6', '#06b6d4', '#6366f1'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'right' },
+                tooltip: {
+                    callbacks: {
+                        label: function (context) {
+                            let label = context.label || '';
+                            if (label) { label += ': '; }
+                            const value = context.raw;
+                            const total = context.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+                            const percentage = ((value / total) * 100).toFixed(1) + '%';
+                            return label + formatMoney(value) + ' (' + percentage + ')';
+                        }
+                    }
+                }
+            },
+            onClick: (e, el) => { if (el.length) setFiltroInterativo('categoria', Object.keys(catMap)[el[0].index]); }
+        }
+    });
+
+    // --- Gráfico de Evolução (Linha) ---
     const mesesEvo = Object.keys(evoMap).sort((a, b) => evoMap[a].sortKey - evoMap[b].sortKey);
     if (state.charts.evo) state.charts.evo.destroy();
-    state.charts.evo = new Chart(document.getElementById('chartEvolucao'), { type: 'line', data: { labels: mesesEvo, datasets: [{ label: 'Receitas', data: mesesEvo.map(m => evoMap[m].r), borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', fill: true, tension: 0.3 }, { label: 'Despesas', data: mesesEvo.map(m => evoMap[m].d), borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', fill: true, tension: 0.3 }] }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } }, interaction: { mode: 'index', intersect: false }, onClick: (e, el) => { if (el.length) setFiltroInterativo('mesEspecifico', mesesEvo[el[0].index]); } } });
+    state.charts.evo = new Chart(document.getElementById('chartEvolucao'), {
+        type: 'line',
+        data: {
+            labels: mesesEvo,
+            datasets: [
+                { label: 'Receitas', data: mesesEvo.map(m => evoMap[m].r), borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', fill: true, tension: 0.3 },
+                { label: 'Despesas', data: mesesEvo.map(m => evoMap[m].d), borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', fill: true, tension: 0.3 }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: { y: { beginAtZero: true } },
+            interaction: { mode: 'index', intersect: false },
+            onClick: (e, el) => { if (el.length) setFiltroInterativo('mesEspecifico', mesesEvo[el[0].index]); }
+        }
+    });
 }
 
 // Inicia App
-init();
+//init();
+async function init() {
+    // Carrega Meta Salva
+    const metaSalva = localStorage.getItem('finance_meta');
+    if (metaSalva) {
+        state.meta = parseFloat(metaSalva);
+        const inputMeta = document.getElementById('input-meta');
+        if (inputMeta) inputMeta.value = state.meta;
+    }
+
+    // Configura Flatpickr (Datas)
+    const dateRange = document.getElementById("date-range");
+    if (dateRange) {
+        flatpickr("#date-range", {
+            mode: "range", dateFormat: "d/m/Y", locale: "pt", theme: "dark",
+            onChange: (sd) => {
+                if (sd.length === 2) {
+                    state.filtros.dataInicio = sd[0]; state.filtros.dataFim = sd[1];
+                    state.filtros.dataFim.setHours(23, 59, 59); state.filtros.mesEspecifico = null;
+                    document.getElementById('sel-mes').value = ""; aplicarFiltros();
+                }
+            }
+        });
+    }
+
+    // --- LÓGICA DE PRIMEIRO ACESSO ---
+    const urlSalva = localStorage.getItem('finance_url');
+
+    if (!urlSalva) {
+        // Se NÃO tem URL salva, abre o modal
+        console.log("Primeiro acesso: Abrindo modal de configuração...");
+        const modal = document.getElementById('modal-config');
+        if (modal) {
+            modal.classList.remove('hidden'); // Remove a classe que esconde o modal
+        }
+    } else {
+        // Se JÁ tem URL, carrega os dados normalmente
+        await carregarDados();
+    }
+}
+
+// Garante que o HTML carregou antes de rodar o script
+document.addEventListener('DOMContentLoaded', () => {
+    init();
+});
 
 // Registra Service Worker (PWA)
 if ('serviceWorker' in navigator) {
@@ -246,5 +423,4 @@ function toggleMenu() {
     menu.classList.toggle('hidden');
     // Adiciona classe flex para garantir layout correto quando visível
     menu.classList.toggle('flex');
-
 }
