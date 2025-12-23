@@ -1,11 +1,15 @@
-//const LINK_PLANILHA = "";
 // Planilha de Demonstração (Padrão)
 const DEMO_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQaHmdvWk9wLHdclkmL6DN4UugjOxBF-HeOWvU91bOmvbC6ZYl4TAfXZ-6mzLEfMiddw95qOtuhr2_J/pub?output=csv";
 
 let state = {
-    dadosBrutos: [], dadosFiltrados: [], meta: 2000,
+    dadosBrutos: [],
+    dadosFiltrados: [],
+    meta: 2000,
+    paginacao: { atual: 1, itensPorPagina: 10 },
     filtros: { dataInicio: null, dataFim: null, categoria: null, tipo: null, dataEspecifica: null, mesEspecifico: null, contaEspecifica: null },
-    charts: {}, painelContasAberto: false
+    charts: {},
+    painelContasAberto: false,
+    datePicker: null // Armazena a instância do Flatpickr
 };
 
 const formatMoney = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
@@ -21,20 +25,69 @@ function togglePainelContas() {
 }
 
 async function init() {
-    const metaSalva = localStorage.getItem('finance_meta');
-    if (metaSalva) { state.meta = parseFloat(metaSalva); document.getElementById('input-meta').value = state.meta; }
+    // Inicializa o Flatpickr (Calendário de Range)
+    initDatePicker();
 
-    flatpickr("#date-range", {
-        mode: "range", dateFormat: "d/m/Y", locale: "pt", theme: "dark",
-        onChange: (sd) => {
-            if (sd.length === 2) {
-                state.filtros.dataInicio = sd[0]; state.filtros.dataFim = sd[1];
-                state.filtros.dataFim.setHours(23, 59, 59); state.filtros.mesEspecifico = null;
-                document.getElementById('sel-mes').value = ""; aplicarFiltros();
+    // Carrega Meta Salva
+    const metaSalva = localStorage.getItem('finance_meta');
+    if (metaSalva) {
+        state.meta = parseFloat(metaSalva);
+        const inputMeta = document.getElementById('input-meta');
+        if (inputMeta) inputMeta.value = state.meta;
+    }
+
+    // --- LÓGICA DE PRIMEIRO ACESSO ---
+    const urlSalva = localStorage.getItem('finance_url');
+
+    if (!urlSalva) {
+        console.log("Primeiro acesso: Abrindo modal de configuração...");
+        const modal = document.getElementById('modal-config');
+        if (modal) {
+            modal.classList.remove('hidden');
+        }
+    } else {
+        await carregarDados();
+    }
+}
+
+function initDatePicker() {
+    state.datePicker = flatpickr("#input-periodo", {
+        mode: "range",
+        dateFormat: "d/m/Y",
+        locale: "pt",
+        altInput: true,
+        altFormat: "d/m/Y",
+        theme: "dark",
+        onChange: function (selectedDates, dateStr, instance) {
+            // Resetar filtro de mês se usar o calendário
+            state.filtros.mesEspecifico = null;
+            sincronizarSelectsMes("");
+
+            if (selectedDates.length === 2) {
+                // Define início (00:00:00) e fim (23:59:59)
+                const inicio = new Date(selectedDates[0]);
+                inicio.setHours(0, 0, 0, 0);
+
+                const fim = new Date(selectedDates[1]);
+                fim.setHours(23, 59, 59, 999);
+
+                state.filtros.dataInicio = inicio;
+                state.filtros.dataFim = fim;
+            } else {
+                state.filtros.dataInicio = null;
+                state.filtros.dataFim = null;
             }
+
+            // Desativa botão Hoje
+            const btn = document.getElementById('btn-hoje');
+            if (btn) {
+                btn.classList.remove('bg-accent', 'border-accent', 'font-bold');
+                btn.classList.add('bg-slate-800', 'border-slate-700');
+            }
+
+            aplicarFiltros();
         }
     });
-    await carregarDados();
 }
 
 async function sincronizarDados() {
@@ -53,21 +106,10 @@ async function sincronizarDados() {
     }
 }
 
-/*async function carregarDados(forceRefresh = false) {
-    const timestamp = forceRefresh ? `&t=${new Date().getTime()}` : '';
-    const finalUrl = "https://corsproxy.io/?" + encodeURIComponent(LINK_PLANILHA + timestamp);
-    try {
-        const res = await fetch(finalUrl);
-        if (res.ok) { processarCSV(await res.text()); } else { throw new Error("Falha na conexão"); }
-    } catch (e) { console.error(e); alert("Erro de conexão."); }
-}*/
-
 async function carregarDados(forceRefresh = false) {
-    // Verifica se o usuário salvou uma URL, senão usa a DEMO
     const userUrl = localStorage.getItem('finance_url');
     const targetUrl = userUrl ? userUrl : DEMO_URL;
 
-    // Feedback visual se estiver em modo Demo (Opcional)
     if (!userUrl) {
         console.log("Usando planilha Demo");
     }
@@ -103,23 +145,12 @@ function salvarConfig() {
     const url = document.getElementById('cfg-url').value.trim();
     if (url) {
         localStorage.setItem('finance_url', url);
-        location.reload(); // Recarrega para aplicar a nova planilha
+        location.reload();
     }
 }
 
-/*function resetarConfig() {
-    if (confirm("Deseja voltar para a planilha de demonstração?")) {
-        localStorage.removeItem('finance_url');
-        location.reload();
-    }
-}*/
-
 function resetarConfig() {
-    // Em vez de apagar e perguntar, nós salvamos a URL de DEMO explicitamente
     localStorage.setItem('finance_url', DEMO_URL);
-
-    // Recarregamos a página. 
-    // Agora o 'init()' vai encontrar uma URL salva e NÃO abrirá o modal.
     location.reload();
 }
 
@@ -158,11 +189,10 @@ function parseInteligente(dados) {
     }).filter(x => x.valid);
 }
 
-// --- SUBSTITUIR NO APP.JS ---
+// --- CONTROLE DE FILTROS E UI ---
 
-// Função auxiliar para atualizar todos os selects de mês na tela
 function sincronizarSelectsMes(valor) {
-    const ids = ['sel-mes', 'sel-mes-extrato']; // IDs do topo e do extrato
+    const ids = ['sel-mes', 'sel-mes-extrato'];
     ids.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.value = valor || "";
@@ -172,14 +202,12 @@ function sincronizarSelectsMes(valor) {
 function popularSelectMeses() {
     const mesesUnicos = [...new Set(state.dadosBrutos.map(d => d.mesAno))];
 
-    // Ordena os meses
     mesesUnicos.sort((a, b) => {
         const [ma, ya] = a.split('/');
         const [mb, yb] = b.split('/');
         return new Date(ya, ma - 1) - new Date(yb, mb - 1);
     });
 
-    // Preenche OS DOIS selects (topo e extrato)
     ['sel-mes', 'sel-mes-extrato'].forEach(id => {
         const select = document.getElementById(id);
         if (select) {
@@ -190,39 +218,54 @@ function popularSelectMeses() {
                 opt.innerText = m;
                 select.appendChild(opt);
             });
-            // Mantém selecionado se já houver filtro
             select.value = state.filtros.mesEspecifico || "";
         }
     });
 }
 
-function alterarFiltroMes(valor) {
-    state.filtros.mesEspecifico = valor || null;
+function filtrarHoje() {
+    const hoje = new Date();
 
-    // Se selecionou mês, limpa as datas personalizadas
-    if (valor) {
-        state.filtros.dataInicio = null;
-        state.filtros.dataFim = null;
-        const dateInput = document.getElementById('date-range');
-        if (dateInput) dateInput.value = "";
+    // Atualiza visualmente o Flatpickr
+    if (state.datePicker) {
+        state.datePicker.setDate([hoje, hoje]);
     }
 
-    // Sincroniza visualmente os dois selects (topo e extrato)
-    sincronizarSelectsMes(valor);
+    const inicio = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 0, 0, 0);
+    const fim = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 23, 59, 59);
 
+    state.filtros.dataInicio = inicio;
+    state.filtros.dataFim = fim;
+    state.filtros.mesEspecifico = null;
+
+    const btn = document.getElementById('btn-hoje');
+    if (btn) {
+        btn.classList.remove('bg-slate-800', 'border-slate-700', 'text-white');
+        btn.classList.add('bg-accent', 'border-accent', 'text-white', 'font-bold');
+    }
+
+    sincronizarSelectsMes("");
     aplicarFiltros();
 }
 
-function limparFiltrosInterativos() {
-    state.filtros.categoria = null;
-    state.filtros.tipo = null;
-    state.filtros.dataEspecifica = null;
-    state.filtros.mesEspecifico = null;
-    state.filtros.contaEspecifica = null;
+function alterarFiltroMes(valor) {
+    state.filtros.mesEspecifico = valor || null;
 
-    // Limpa ambos os selects visualmente
-    sincronizarSelectsMes("");
+    if (valor) {
+        state.filtros.dataInicio = null;
+        state.filtros.dataFim = null;
 
+        // Limpa o datepicker
+        if (state.datePicker) state.datePicker.clear();
+
+        const btn = document.getElementById('btn-hoje');
+        if (btn) {
+            btn.classList.remove('bg-accent', 'border-accent', 'font-bold');
+            btn.classList.add('bg-slate-800', 'border-slate-700');
+        }
+    }
+
+    sincronizarSelectsMes(valor);
     aplicarFiltros();
 }
 
@@ -230,19 +273,78 @@ function atualizarMeta(v) { state.meta = parseFloat(v) || 2000; localStorage.set
 function toggleFiltroTipo(t) { state.filtros.tipo = (state.filtros.tipo === t) ? null : t; aplicarFiltros(); }
 function setFiltroInterativo(k, v) {
     state.filtros[k] = (state.filtros[k] === v) ? null : v;
-    if (k === 'mesEspecifico') { document.getElementById('sel-mes').value = state.filtros[k] || ""; }
-    aplicarFiltros();
+    if (k === 'mesEspecifico') {
+        alterarFiltroMes(state.filtros[k]);
+    } else {
+        aplicarFiltros();
+    }
 }
 function filtrarPorConta(c) { state.filtros.contaEspecifica = (state.filtros.contaEspecifica === c) ? null : c; aplicarFiltros(); }
-function alterarFiltroMes(valor) {
-    state.filtros.mesEspecifico = valor || null;
-    if (valor) { state.filtros.dataInicio = null; state.filtros.dataFim = null; document.getElementById('date-range').value = ""; }
-    aplicarFiltros();
-}
+
 function limparFiltrosInterativos() {
     state.filtros.categoria = null; state.filtros.tipo = null; state.filtros.dataEspecifica = null;
     state.filtros.mesEspecifico = null; state.filtros.contaEspecifica = null;
-    document.getElementById('sel-mes').value = ""; aplicarFiltros();
+    state.filtros.dataInicio = null; state.filtros.dataFim = null;
+
+    // Limpa Datepicker
+    if (state.datePicker) state.datePicker.clear();
+
+    sincronizarSelectsMes("");
+
+    const btn = document.getElementById('btn-hoje');
+    if (btn) {
+        btn.classList.remove('bg-accent', 'border-accent', 'font-bold');
+        btn.classList.add('bg-slate-800', 'border-slate-700');
+    }
+
+    aplicarFiltros();
+}
+
+function mudarPagina(delta) {
+    const totalPaginas = Math.ceil(state.dadosFiltrados.length / state.paginacao.itensPorPagina);
+    const novaPagina = state.paginacao.atual + delta;
+
+    if (novaPagina >= 1 && novaPagina <= totalPaginas) {
+        state.paginacao.atual = novaPagina;
+        renderizarTabelaPaginada();
+    }
+}
+
+function renderizarTabelaPaginada() {
+    const tbody = document.getElementById('tabela-corpo');
+    tbody.innerHTML = '';
+
+    const dadosOrdenados = state.dadosFiltrados.slice().reverse();
+
+    const totalItens = dadosOrdenados.length;
+    const itensPorPag = state.paginacao.itensPorPagina;
+    const totalPaginas = Math.ceil(totalItens / itensPorPag) || 1;
+
+    if (state.paginacao.atual > totalPaginas) state.paginacao.atual = 1;
+
+    const inicio = (state.paginacao.atual - 1) * itensPorPag;
+    const fim = inicio + itensPorPag;
+    const dadosPagina = dadosOrdenados.slice(inicio, fim);
+
+    dadosPagina.forEach(i => {
+        const cor = i.tipo === 'Receita' ? 'text-success' : 'text-danger';
+        tbody.innerHTML += `
+            <tr class="hover:bg-slate-700/50 transition border-b border-slate-700">
+                <td class="p-3 text-slate-400">${i.dataStr}</td>
+                <td class="p-3 text-slate-200">${i.descricao}</td>
+                <td class="p-3"><span class="bg-slate-700 px-2 py-1 rounded text-xs text-slate-300">${i.categoria}</span></td>
+                <td class="p-3 text-gray-400 text-xs">${i.conta}</td>
+                <td class="p-3 text-right ${cor} font-mono">${formatMoney(i.valor)}</td>
+            </tr>`;
+    });
+
+    document.getElementById('info-paginacao').innerText =
+        totalItens > 0
+            ? `Mostrando ${inicio + 1}-${Math.min(fim, totalItens)} de ${totalItens}`
+            : 'Nenhum dado encontrado';
+
+    document.getElementById('btn-ant').disabled = state.paginacao.atual === 1;
+    document.getElementById('btn-prox').disabled = state.paginacao.atual >= totalPaginas || totalItens === 0;
 }
 
 function aplicarFiltros() {
@@ -257,6 +359,8 @@ function aplicarFiltros() {
         if (f.contaEspecifica && d.conta !== f.contaEspecifica) return false;
         return true;
     });
+
+    state.paginacao.atual = 1;
     atualizarUI();
 }
 
@@ -302,7 +406,7 @@ function atualizarUI() {
     else if (pct < 90) barra.className = 'h-4 rounded-full progress-fill bg-warning neon-bar-yellow';
     else barra.className = 'h-4 rounded-full progress-fill bg-danger neon-bar-red';
 
-    const temFiltro = state.filtros.categoria || state.filtros.tipo || state.filtros.dataEspecifica || state.filtros.mesEspecifico || state.filtros.contaEspecifica;
+    const temFiltro = state.filtros.categoria || state.filtros.tipo || state.filtros.dataEspecifica || state.filtros.mesEspecifico || state.filtros.contaEspecifica || state.filtros.dataInicio;
     document.getElementById('btn-limpar').className = temFiltro ? "px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm transition flex items-center gap-2" : "hidden";
 
     let contasDisponiveis = {};
@@ -325,11 +429,7 @@ function atualizarUI() {
         divContas.appendChild(btn);
     });
 
-    const tbody = document.getElementById('tabela-corpo'); tbody.innerHTML = '';
-    state.dadosFiltrados.slice().reverse().forEach(i => {
-        const cor = i.tipo === 'Receita' ? 'text-success' : 'text-danger';
-        tbody.innerHTML += `<tr class="hover:bg-slate-700/50 transition border-b border-slate-700"><td class="p-3 text-slate-400">${i.dataStr}</td><td class="p-3 text-slate-200">${i.descricao}</td><td class="p-3"><span class="bg-slate-700 px-2 py-1 rounded text-xs text-slate-300">${i.categoria}</span></td><td class="p-3 text-gray-400 text-xs">${i.conta}</td><td class="p-3 text-right ${cor} font-mono">${formatMoney(i.valor)}</td></tr>`;
-    });
+    renderizarTabelaPaginada();
     renderizarGraficos(catMap, evoMap, mensalMap);
 }
 
@@ -361,7 +461,7 @@ function renderizarGraficos(catMap, evoMap, mensalMap) {
         }
     });
 
-    // --- Gráfico de Categorias (Donut) com Porcentagem ---
+    // --- Gráfico de Categorias (Donut) ---
     if (state.charts.cat) state.charts.cat.destroy();
     state.charts.cat = new Chart(document.getElementById('chartCategorias'), {
         type: 'doughnut',
@@ -417,48 +517,6 @@ function renderizarGraficos(catMap, evoMap, mensalMap) {
     });
 }
 
-// Inicia App
-//init();
-async function init() {
-    // Carrega Meta Salva
-    const metaSalva = localStorage.getItem('finance_meta');
-    if (metaSalva) {
-        state.meta = parseFloat(metaSalva);
-        const inputMeta = document.getElementById('input-meta');
-        if (inputMeta) inputMeta.value = state.meta;
-    }
-
-    // Configura Flatpickr (Datas)
-    const dateRange = document.getElementById("date-range");
-    if (dateRange) {
-        flatpickr("#date-range", {
-            mode: "range", dateFormat: "d/m/Y", locale: "pt", theme: "dark",
-            onChange: (sd) => {
-                if (sd.length === 2) {
-                    state.filtros.dataInicio = sd[0]; state.filtros.dataFim = sd[1];
-                    state.filtros.dataFim.setHours(23, 59, 59); state.filtros.mesEspecifico = null;
-                    document.getElementById('sel-mes').value = ""; aplicarFiltros();
-                }
-            }
-        });
-    }
-
-    // --- LÓGICA DE PRIMEIRO ACESSO ---
-    const urlSalva = localStorage.getItem('finance_url');
-
-    if (!urlSalva) {
-        // Se NÃO tem URL salva, abre o modal
-        console.log("Primeiro acesso: Abrindo modal de configuração...");
-        const modal = document.getElementById('modal-config');
-        if (modal) {
-            modal.classList.remove('hidden'); // Remove a classe que esconde o modal
-        }
-    } else {
-        // Se JÁ tem URL, carrega os dados normalmente
-        await carregarDados();
-    }
-}
-
 // Garante que o HTML carregou antes de rodar o script
 document.addEventListener('DOMContentLoaded', () => {
     init();
@@ -473,11 +531,8 @@ if ('serviceWorker' in navigator) {
     });
 }
 
-// --- Função Toggle Menu Mobile ---
 function toggleMenu() {
     const menu = document.getElementById('mobile-filters');
-    // Alterna a classe 'hidden' para mostrar/esconder
     menu.classList.toggle('hidden');
-    // Adiciona classe flex para garantir layout correto quando visível
     menu.classList.toggle('flex');
 }

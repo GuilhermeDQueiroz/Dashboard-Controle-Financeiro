@@ -5,15 +5,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Controle Financeiro</title>
+
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0f172a">
     <link rel="apple-touch-icon" href="icons/icon-192.png">
+
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://npmcdn.com/flatpickr/dist/l10n/pt.js"></script>
 
@@ -53,6 +55,12 @@
                             </svg>
                             Controle Financeiro
                         </h1>
+                    </div>
+                    <div class="flex content items-center w-full md:w-auto">
+                        <p class="text-gray-400 text-sm mt-1 ml-1 flex items-center gap-2">
+                            <span id="status-indicator" class="w-2 h-2 rounded-full bg-green-500"></span>
+                            <span id="status-text">Conectado</span>
+                        </p>
                         <button onclick="abrirConfig()"
                             class="p-2 rounded-full hover:bg-slate-700 text-gray-400 hover:text-white transition mr-2"
                             title="Configurar Planilha">
@@ -75,12 +83,7 @@
                             </svg>
                         </button>
                     </div>
-                    <p class="text-gray-400 text-sm mt-1 ml-1 flex items-center gap-2">
-                        <span id="status-indicator" class="w-2 h-2 rounded-full bg-green-500"></span>
-                        <span id="status-text">Conectado</span>
-                    </p>
                 </div>
-
                 <button onclick="toggleMenu()"
                     class="md:hidden p-2 rounded-lg bg-slate-800 text-white border border-slate-700">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -98,6 +101,14 @@
                     <span>✕</span> Limpar
                 </button>
 
+                <div class="w-full md:w-auto">
+                    <label class="text-xs text-gray-400 block mb-1 ml-1">Ação Rápida</label>
+                    <button id="btn-hoje" onclick="filtrarHoje()"
+                        class="w-full md:w-24 px-4 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white text-xs rounded-lg transition flex items-center justify-center gap-2">
+                        Hoje
+                    </button>
+                </div>
+
                 <div class="w-full md:w-48">
                     <label class="text-xs text-gray-400 block mb-1 ml-1">Mês de Referência</label>
                     <select id="sel-mes" onchange="alterarFiltroMes(this.value)"
@@ -106,17 +117,25 @@
                     </select>
                 </div>
 
+                <div class="w-full md:w-56">
+                    <label class="text-xs text-gray-400 block mb-1 ml-1">Período (De - Até)</label>
+                    <div class="relative">
+                        <input type="text" id="input-periodo" placeholder="Selecionar Datas..." readonly="readonly"
+                            class="w-full bg-slate-800 text-white text-sm rounded-lg p-2.5 border border-slate-700 focus:ring-accent focus:border-accent block pl-10 cursor-pointer">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z">
+                                </path>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="w-full md:w-32">
                     <label class="text-xs text-gray-400 block mb-1 ml-1">Limite de gasto (R$)</label>
                     <input type="number" id="input-meta" onchange="atualizarMeta(this.value)"
                         class="w-full bg-slate-800 text-white text-sm rounded-lg p-2.5 border border-slate-700 focus:ring-accent focus:border-accent block">
-                </div>
-
-                <div class="w-full md:w-48">
-                    <label class="text-xs text-gray-400 block mb-1 ml-1">Período</label>
-                    <input id="date-range"
-                        class="w-full bg-slate-800 text-white text-sm rounded-lg p-2.5 border border-slate-700 focus:ring-accent focus:border-accent block placeholder-gray-500"
-                        placeholder="Selecione as datas...">
                 </div>
             </div>
         </div>
@@ -249,6 +268,22 @@
                 </thead>
                 <tbody id="tabela-corpo" class="text-sm divide-y divide-slate-700"></tbody>
             </table>
+        </div>
+
+        <div class="flex justify-between items-center mt-4 border-t border-slate-700/50 pt-4">
+            <span class="text-xs text-gray-400" id="info-paginacao">
+                Mostrando 0-0 de 0
+            </span>
+            <div class="flex gap-2">
+                <button onclick="mudarPagina(-1)" id="btn-ant" disabled
+                    class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs rounded border border-slate-700 transition">
+                    Anterior
+                </button>
+                <button onclick="mudarPagina(1)" id="btn-prox" disabled
+                    class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs rounded border border-slate-700 transition">
+                    Próximo
+                </button>
+            </div>
         </div>
     </div>
 
