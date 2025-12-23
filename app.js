@@ -158,15 +158,72 @@ function parseInteligente(dados) {
     }).filter(x => x.valid);
 }
 
+// --- SUBSTITUIR NO APP.JS ---
+
+// Função auxiliar para atualizar todos os selects de mês na tela
+function sincronizarSelectsMes(valor) {
+    const ids = ['sel-mes', 'sel-mes-extrato']; // IDs do topo e do extrato
+    ids.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = valor || "";
+    });
+}
+
 function popularSelectMeses() {
-    const select = document.getElementById('sel-mes');
-    select.innerHTML = '<option value="">Todos os Meses</option>';
     const mesesUnicos = [...new Set(state.dadosBrutos.map(d => d.mesAno))];
+
+    // Ordena os meses
     mesesUnicos.sort((a, b) => {
-        const [ma, ya] = a.split('/'); const [mb, yb] = b.split('/');
+        const [ma, ya] = a.split('/');
+        const [mb, yb] = b.split('/');
         return new Date(ya, ma - 1) - new Date(yb, mb - 1);
     });
-    mesesUnicos.forEach(m => { const opt = document.createElement('option'); opt.value = m; opt.innerText = m; select.appendChild(opt); });
+
+    // Preenche OS DOIS selects (topo e extrato)
+    ['sel-mes', 'sel-mes-extrato'].forEach(id => {
+        const select = document.getElementById(id);
+        if (select) {
+            select.innerHTML = '<option value="">Todos os Meses</option>';
+            mesesUnicos.forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m;
+                opt.innerText = m;
+                select.appendChild(opt);
+            });
+            // Mantém selecionado se já houver filtro
+            select.value = state.filtros.mesEspecifico || "";
+        }
+    });
+}
+
+function alterarFiltroMes(valor) {
+    state.filtros.mesEspecifico = valor || null;
+
+    // Se selecionou mês, limpa as datas personalizadas
+    if (valor) {
+        state.filtros.dataInicio = null;
+        state.filtros.dataFim = null;
+        const dateInput = document.getElementById('date-range');
+        if (dateInput) dateInput.value = "";
+    }
+
+    // Sincroniza visualmente os dois selects (topo e extrato)
+    sincronizarSelectsMes(valor);
+
+    aplicarFiltros();
+}
+
+function limparFiltrosInterativos() {
+    state.filtros.categoria = null;
+    state.filtros.tipo = null;
+    state.filtros.dataEspecifica = null;
+    state.filtros.mesEspecifico = null;
+    state.filtros.contaEspecifica = null;
+
+    // Limpa ambos os selects visualmente
+    sincronizarSelectsMes("");
+
+    aplicarFiltros();
 }
 
 function atualizarMeta(v) { state.meta = parseFloat(v) || 2000; localStorage.setItem('finance_meta', state.meta); aplicarFiltros(); }
