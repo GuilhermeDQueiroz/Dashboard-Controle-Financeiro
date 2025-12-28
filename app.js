@@ -1,15 +1,16 @@
+//const LINK_PLANILHA = "";
 // Planilha de Demonstração (Padrão)
 const DEMO_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQaHmdvWk9wLHdclkmL6DN4UugjOxBF-HeOWvU91bOmvbC6ZYl4TAfXZ-6mzLEfMiddw95qOtuhr2_J/pub?output=csv";
 
 let state = {
-    dadosBrutos: [],
-    dadosFiltrados: [],
+    dadosBrutos: [], 
+    dadosFiltrados: [], 
     meta: 2000,
-    paginacao: { atual: 1, itensPorPagina: 10 },
     filtros: { dataInicio: null, dataFim: null, categoria: null, tipo: null, dataEspecifica: null, mesEspecifico: null, contaEspecifica: null },
-    charts: {},
-    painelContasAberto: false,
-    datePicker: null // Armazena a instância do Flatpickr
+    // Configuração de Paginação
+    paginacao: { paginaAtual: 1, itensPorPagina: 10 },
+    charts: {}, 
+    painelContasAberto: false
 };
 
 const formatMoney = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
@@ -25,9 +26,6 @@ function togglePainelContas() {
 }
 
 async function init() {
-    // Inicializa o Flatpickr (Calendário de Range)
-    initDatePicker();
-
     // Carrega Meta Salva
     const metaSalva = localStorage.getItem('finance_meta');
     if (metaSalva) {
@@ -36,58 +34,38 @@ async function init() {
         if (inputMeta) inputMeta.value = state.meta;
     }
 
+    // Configura Flatpickr (Datas)
+    const dateRange = document.getElementById("date-range");
+    if (dateRange) {
+        flatpickr("#date-range", {
+            mode: "range", dateFormat: "d/m/Y", locale: "pt", theme: "dark",
+            onChange: (sd) => {
+                if (sd.length === 2) {
+                    state.filtros.dataInicio = sd[0]; state.filtros.dataFim = sd[1];
+                    state.filtros.dataFim.setHours(23, 59, 59); state.filtros.mesEspecifico = null;
+                    // Limpa ambos os selects de mês
+                    document.getElementById('sel-mes').value = ""; 
+                    document.getElementById('sel-mes-tabela').value = "";
+                    aplicarFiltros();
+                }
+            }
+        });
+    }
+
     // --- LÓGICA DE PRIMEIRO ACESSO ---
     const urlSalva = localStorage.getItem('finance_url');
 
     if (!urlSalva) {
+        // Se NÃO tem URL salva, abre o modal
         console.log("Primeiro acesso: Abrindo modal de configuração...");
         const modal = document.getElementById('modal-config');
         if (modal) {
-            modal.classList.remove('hidden');
+            modal.classList.remove('hidden'); // Remove a classe que esconde o modal
         }
     } else {
+        // Se JÁ tem URL, carrega os dados normalmente
         await carregarDados();
     }
-}
-
-function initDatePicker() {
-    state.datePicker = flatpickr("#input-periodo", {
-        mode: "range",
-        dateFormat: "d/m/Y",
-        locale: "pt",
-        altInput: true,
-        altFormat: "d/m/Y",
-        theme: "dark",
-        onChange: function (selectedDates, dateStr, instance) {
-            // Resetar filtro de mês se usar o calendário
-            state.filtros.mesEspecifico = null;
-            sincronizarSelectsMes("");
-
-            if (selectedDates.length === 2) {
-                // Define início (00:00:00) e fim (23:59:59)
-                const inicio = new Date(selectedDates[0]);
-                inicio.setHours(0, 0, 0, 0);
-
-                const fim = new Date(selectedDates[1]);
-                fim.setHours(23, 59, 59, 999);
-
-                state.filtros.dataInicio = inicio;
-                state.filtros.dataFim = fim;
-            } else {
-                state.filtros.dataInicio = null;
-                state.filtros.dataFim = null;
-            }
-
-            // Desativa botão Hoje
-            const btn = document.getElementById('btn-hoje');
-            if (btn) {
-                btn.classList.remove('bg-accent', 'border-accent', 'font-bold');
-                btn.classList.add('bg-slate-800', 'border-slate-700');
-            }
-
-            aplicarFiltros();
-        }
-    });
 }
 
 async function sincronizarDados() {
@@ -107,9 +85,11 @@ async function sincronizarDados() {
 }
 
 async function carregarDados(forceRefresh = false) {
+    // Verifica se o usuário salvou uma URL, senão usa a DEMO
     const userUrl = localStorage.getItem('finance_url');
     const targetUrl = userUrl ? userUrl : DEMO_URL;
 
+    // Feedback visual se estiver em modo Demo (Opcional)
     if (!userUrl) {
         console.log("Usando planilha Demo");
     }
@@ -145,11 +125,12 @@ function salvarConfig() {
     const url = document.getElementById('cfg-url').value.trim();
     if (url) {
         localStorage.setItem('finance_url', url);
-        location.reload();
+        location.reload(); // Recarrega para aplicar a nova planilha
     }
 }
 
 function resetarConfig() {
+    // Em vez de apagar e perguntar, nós salvamos a URL de DEMO explicitamente
     localStorage.setItem('finance_url', DEMO_URL);
     location.reload();
 }
@@ -189,162 +170,84 @@ function parseInteligente(dados) {
     }).filter(x => x.valid);
 }
 
-// --- CONTROLE DE FILTROS E UI ---
-
-function sincronizarSelectsMes(valor) {
-    const ids = ['sel-mes', 'sel-mes-extrato'];
-    ids.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.value = valor || "";
-    });
-}
-
+// ATUALIZADO: Popula ambos os selects (topo e tabela)
 function popularSelectMeses() {
+    const selects = [document.getElementById('sel-mes'), document.getElementById('sel-mes-tabela')];
+    
+    // Obtém lista única de meses
     const mesesUnicos = [...new Set(state.dadosBrutos.map(d => d.mesAno))];
-
     mesesUnicos.sort((a, b) => {
-        const [ma, ya] = a.split('/');
-        const [mb, yb] = b.split('/');
+        const [ma, ya] = a.split('/'); const [mb, yb] = b.split('/');
         return new Date(ya, ma - 1) - new Date(yb, mb - 1);
     });
 
-    ['sel-mes', 'sel-mes-extrato'].forEach(id => {
-        const select = document.getElementById(id);
-        if (select) {
-            select.innerHTML = '<option value="">Todos os Meses</option>';
-            mesesUnicos.forEach(m => {
-                const opt = document.createElement('option');
-                opt.value = m;
-                opt.innerText = m;
-                select.appendChild(opt);
-            });
-            select.value = state.filtros.mesEspecifico || "";
+    // Preenche os dois selects
+    selects.forEach(select => {
+        if (!select) return;
+        select.innerHTML = '<option value="">Todos os Meses</option>';
+        mesesUnicos.forEach(m => { 
+            const opt = document.createElement('option'); 
+            opt.value = m; 
+            opt.innerText = m; 
+            select.appendChild(opt); 
+        });
+        // Restaura seleção se já existir no state
+        if (state.filtros.mesEspecifico) {
+            select.value = state.filtros.mesEspecifico;
         }
     });
-}
-
-function filtrarHoje() {
-    const hoje = new Date();
-
-    // Atualiza visualmente o Flatpickr
-    if (state.datePicker) {
-        state.datePicker.setDate([hoje, hoje]);
-    }
-
-    const inicio = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 0, 0, 0);
-    const fim = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 23, 59, 59);
-
-    state.filtros.dataInicio = inicio;
-    state.filtros.dataFim = fim;
-    state.filtros.mesEspecifico = null;
-
-    const btn = document.getElementById('btn-hoje');
-    if (btn) {
-        btn.classList.remove('bg-slate-800', 'border-slate-700', 'text-white');
-        btn.classList.add('bg-accent', 'border-accent', 'text-white', 'font-bold');
-    }
-
-    sincronizarSelectsMes("");
-    aplicarFiltros();
-}
-
-function alterarFiltroMes(valor) {
-    state.filtros.mesEspecifico = valor || null;
-
-    if (valor) {
-        state.filtros.dataInicio = null;
-        state.filtros.dataFim = null;
-
-        // Limpa o datepicker
-        if (state.datePicker) state.datePicker.clear();
-
-        const btn = document.getElementById('btn-hoje');
-        if (btn) {
-            btn.classList.remove('bg-accent', 'border-accent', 'font-bold');
-            btn.classList.add('bg-slate-800', 'border-slate-700');
-        }
-    }
-
-    sincronizarSelectsMes(valor);
-    aplicarFiltros();
 }
 
 function atualizarMeta(v) { state.meta = parseFloat(v) || 2000; localStorage.setItem('finance_meta', state.meta); aplicarFiltros(); }
 function toggleFiltroTipo(t) { state.filtros.tipo = (state.filtros.tipo === t) ? null : t; aplicarFiltros(); }
 function setFiltroInterativo(k, v) {
     state.filtros[k] = (state.filtros[k] === v) ? null : v;
-    if (k === 'mesEspecifico') {
-        alterarFiltroMes(state.filtros[k]);
-    } else {
-        aplicarFiltros();
+    if (k === 'mesEspecifico') { 
+        // Sincroniza selects
+        const selTopo = document.getElementById('sel-mes');
+        const selTabela = document.getElementById('sel-mes-tabela');
+        const val = state.filtros[k] || "";
+        if(selTopo) selTopo.value = val;
+        if(selTabela) selTabela.value = val;
     }
-}
-function filtrarPorConta(c) { state.filtros.contaEspecifica = (state.filtros.contaEspecifica === c) ? null : c; aplicarFiltros(); }
-
-function limparFiltrosInterativos() {
-    state.filtros.categoria = null; state.filtros.tipo = null; state.filtros.dataEspecifica = null;
-    state.filtros.mesEspecifico = null; state.filtros.contaEspecifica = null;
-    state.filtros.dataInicio = null; state.filtros.dataFim = null;
-
-    // Limpa Datepicker
-    if (state.datePicker) state.datePicker.clear();
-
-    sincronizarSelectsMes("");
-
-    const btn = document.getElementById('btn-hoje');
-    if (btn) {
-        btn.classList.remove('bg-accent', 'border-accent', 'font-bold');
-        btn.classList.add('bg-slate-800', 'border-slate-700');
-    }
-
     aplicarFiltros();
 }
 
-function mudarPagina(delta) {
-    const totalPaginas = Math.ceil(state.dadosFiltrados.length / state.paginacao.itensPorPagina);
-    const novaPagina = state.paginacao.atual + delta;
+function filtrarPorConta(c) { state.filtros.contaEspecifica = (state.filtros.contaEspecifica === c) ? null : c; aplicarFiltros(); }
 
-    if (novaPagina >= 1 && novaPagina <= totalPaginas) {
-        state.paginacao.atual = novaPagina;
-        renderizarTabelaPaginada();
+// ATUALIZADO: Sincroniza selects e reseta paginação
+function alterarFiltroMes(valor) {
+    state.filtros.mesEspecifico = valor || null;
+    
+    // Sincroniza visualmente os dois selects (topo e tabela)
+    const selTopo = document.getElementById('sel-mes');
+    const selTabela = document.getElementById('sel-mes-tabela');
+    if (selTopo) selTopo.value = valor || "";
+    if (selTabela) selTabela.value = valor || "";
+
+    if (valor) { 
+        state.filtros.dataInicio = null; 
+        state.filtros.dataFim = null; 
+        document.getElementById('date-range').value = ""; 
     }
+    
+    aplicarFiltros();
 }
 
-function renderizarTabelaPaginada() {
-    const tbody = document.getElementById('tabela-corpo');
-    tbody.innerHTML = '';
+// ATUALIZADO: Limpa tudo e reseta selects
+function limparFiltrosInterativos() {
+    state.filtros.categoria = null; 
+    state.filtros.tipo = null; 
+    state.filtros.dataEspecifica = null;
+    state.filtros.mesEspecifico = null; 
+    state.filtros.contaEspecifica = null;
+    
+    // Reseta visual dos selects
+    document.getElementById('sel-mes').value = ""; 
+    const selTabela = document.getElementById('sel-mes-tabela');
+    if (selTabela) selTabela.value = "";
 
-    const dadosOrdenados = state.dadosFiltrados.slice().reverse();
-
-    const totalItens = dadosOrdenados.length;
-    const itensPorPag = state.paginacao.itensPorPagina;
-    const totalPaginas = Math.ceil(totalItens / itensPorPag) || 1;
-
-    if (state.paginacao.atual > totalPaginas) state.paginacao.atual = 1;
-
-    const inicio = (state.paginacao.atual - 1) * itensPorPag;
-    const fim = inicio + itensPorPag;
-    const dadosPagina = dadosOrdenados.slice(inicio, fim);
-
-    dadosPagina.forEach(i => {
-        const cor = i.tipo === 'Receita' ? 'text-success' : 'text-danger';
-        tbody.innerHTML += `
-            <tr class="hover:bg-slate-700/50 transition border-b border-slate-700">
-                <td class="p-3 text-slate-400">${i.dataStr}</td>
-                <td class="p-3 text-slate-200">${i.descricao}</td>
-                <td class="p-3"><span class="bg-slate-700 px-2 py-1 rounded text-xs text-slate-300">${i.categoria}</span></td>
-                <td class="p-3 text-gray-400 text-xs">${i.conta}</td>
-                <td class="p-3 text-right ${cor} font-mono">${formatMoney(i.valor)}</td>
-            </tr>`;
-    });
-
-    document.getElementById('info-paginacao').innerText =
-        totalItens > 0
-            ? `Mostrando ${inicio + 1}-${Math.min(fim, totalItens)} de ${totalItens}`
-            : 'Nenhum dado encontrado';
-
-    document.getElementById('btn-ant').disabled = state.paginacao.atual === 1;
-    document.getElementById('btn-prox').disabled = state.paginacao.atual >= totalPaginas || totalItens === 0;
+    aplicarFiltros();
 }
 
 function aplicarFiltros() {
@@ -360,8 +263,59 @@ function aplicarFiltros() {
         return true;
     });
 
-    state.paginacao.atual = 1;
+    // Resetar para a primeira página sempre que filtrar
+    state.paginacao.paginaAtual = 1;
     atualizarUI();
+}
+
+// --- Funções de Paginação (NOVO) ---
+function mudarPagina(delta) {
+    const totalPaginas = Math.ceil(state.dadosFiltrados.length / state.paginacao.itensPorPagina);
+    const novaPagina = state.paginacao.paginaAtual + delta;
+
+    if (novaPagina >= 1 && novaPagina <= totalPaginas) {
+        state.paginacao.paginaAtual = novaPagina;
+        renderizarTabela();
+    }
+}
+
+function renderizarTabela() {
+    const tbody = document.getElementById('tabela-corpo');
+    tbody.innerHTML = '';
+
+    // Verifica se há dados
+    if (state.dadosFiltrados.length === 0) {
+        document.getElementById('page-info').innerText = "Nenhum registro";
+        document.getElementById('btn-prev').disabled = true;
+        document.getElementById('btn-next').disabled = true;
+        return;
+    }
+
+    // Calcula índices da paginação
+    const start = (state.paginacao.paginaAtual - 1) * state.paginacao.itensPorPagina;
+    const end = start + state.paginacao.itensPorPagina;
+
+    // Obtém os dados da página atual (invertendo para mostrar mais recentes primeiro)
+    const dadosPaginados = state.dadosFiltrados.slice().reverse().slice(start, end);
+
+    dadosPaginados.forEach(i => {
+        const cor = i.tipo === 'Receita' ? 'text-success' : 'text-danger';
+        tbody.innerHTML += `
+            <tr class="hover:bg-slate-700/50 transition border-b border-slate-700">
+                <td class="p-3 text-slate-400">${i.dataStr}</td>
+                <td class="p-3 text-slate-200">${i.descricao}</td>
+                <td class="p-3"><span class="bg-slate-700 px-2 py-1 rounded text-xs text-slate-300">${i.categoria}</span></td>
+                <td class="p-3 text-gray-400 text-xs">${i.conta}</td>
+                <td class="p-3 text-right ${cor} font-mono">${formatMoney(i.valor)}</td>
+            </tr>`;
+    });
+
+    // Atualiza info e botões
+    const totalPaginas = Math.ceil(state.dadosFiltrados.length / state.paginacao.itensPorPagina);
+    document.getElementById('page-info').innerText = `Página ${state.paginacao.paginaAtual} de ${totalPaginas}`;
+    
+    document.getElementById('btn-prev').disabled = state.paginacao.paginaAtual === 1;
+    document.getElementById('btn-next').disabled = state.paginacao.paginaAtual === totalPaginas;
 }
 
 function atualizarUI() {
@@ -372,6 +326,8 @@ function atualizarUI() {
         if (!evoMap[d.mesAno]) evoMap[d.mesAno] = { r: 0, d: 0, sortKey: d.dataObj.getFullYear() * 100 + d.dataObj.getMonth() };
         if (d.tipo === 'Receita') evoMap[d.mesAno].r += d.valor; else evoMap[d.mesAno].d += d.valor;
     });
+    
+    // Dados gerais para o gráfico mensal (independente de alguns filtros)
     const dadosGerais = state.dadosBrutos.filter(d => {
         const f = state.filtros;
         if (f.dataInicio && d.dataObj < f.dataInicio) return false;
@@ -406,8 +362,8 @@ function atualizarUI() {
     else if (pct < 90) barra.className = 'h-4 rounded-full progress-fill bg-warning neon-bar-yellow';
     else barra.className = 'h-4 rounded-full progress-fill bg-danger neon-bar-red';
 
-    const temFiltro = state.filtros.categoria || state.filtros.tipo || state.filtros.dataEspecifica || state.filtros.mesEspecifico || state.filtros.contaEspecifica || state.filtros.dataInicio;
-    document.getElementById('btn-limpar').className = temFiltro ? "px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm transition flex items-center gap-2" : "hidden";
+    const temFiltro = state.filtros.categoria || state.filtros.tipo || state.filtros.dataEspecifica || state.filtros.mesEspecifico || state.filtros.contaEspecifica;
+    document.getElementById('btn-limpar').className = temFiltro ? "px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm transition flex items-center justify-center gap-2" : "hidden";
 
     let contasDisponiveis = {};
     state.dadosBrutos.forEach(d => {
@@ -429,7 +385,9 @@ function atualizarUI() {
         divContas.appendChild(btn);
     });
 
-    renderizarTabelaPaginada();
+    // Chama função de renderizar tabela paginada
+    renderizarTabela();
+    
     renderizarGraficos(catMap, evoMap, mensalMap);
 }
 
@@ -461,7 +419,7 @@ function renderizarGraficos(catMap, evoMap, mensalMap) {
         }
     });
 
-    // --- Gráfico de Categorias (Donut) ---
+    // --- Gráfico de Categorias (Donut) com Porcentagem ---
     if (state.charts.cat) state.charts.cat.destroy();
     state.charts.cat = new Chart(document.getElementById('chartCategorias'), {
         type: 'doughnut',
@@ -531,6 +489,7 @@ if ('serviceWorker' in navigator) {
     });
 }
 
+// --- Função Toggle Menu Mobile ---
 function toggleMenu() {
     const menu = document.getElementById('mobile-filters');
     menu.classList.toggle('hidden');

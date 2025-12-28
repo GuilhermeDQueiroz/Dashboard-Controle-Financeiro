@@ -6,16 +6,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Controle Financeiro</title>
 
-    <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0f172a">
     <link rel="apple-touch-icon" href="icons/icon-192.png">
 
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
-
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://npmcdn.com/flatpickr/dist/l10n/pt.js"></script>
 
@@ -101,14 +100,6 @@
                     <span>✕</span> Limpar
                 </button>
 
-                <div class="w-full md:w-auto">
-                    <label class="text-xs text-gray-400 block mb-1 ml-1">Ação Rápida</label>
-                    <button id="btn-hoje" onclick="filtrarHoje()"
-                        class="w-full md:w-24 px-4 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white text-xs rounded-lg transition flex items-center justify-center gap-2">
-                        Hoje
-                    </button>
-                </div>
-
                 <div class="w-full md:w-48">
                     <label class="text-xs text-gray-400 block mb-1 ml-1">Mês de Referência</label>
                     <select id="sel-mes" onchange="alterarFiltroMes(this.value)"
@@ -117,19 +108,11 @@
                     </select>
                 </div>
 
-                <div class="w-full md:w-56">
+                <div class="w-full md:w-48">
                     <label class="text-xs text-gray-400 block mb-1 ml-1">Período (De - Até)</label>
-                    <div class="relative">
-                        <input type="text" id="input-periodo" placeholder="Selecionar Datas..." readonly="readonly"
-                            class="w-full bg-slate-800 text-white text-sm rounded-lg p-2.5 border border-slate-700 focus:ring-accent focus:border-accent block pl-10 cursor-pointer">
-                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z">
-                                </path>
-                            </svg>
-                        </div>
-                    </div>
+                    <input id="date-range"
+                        class="w-full bg-slate-800 text-white text-sm rounded-lg p-2.5 border border-slate-700 focus:ring-accent focus:border-accent block placeholder-gray-500"
+                        placeholder="Selecione as datas...">
                 </div>
 
                 <div class="w-full md:w-32">
@@ -139,19 +122,6 @@
                 </div>
             </div>
         </div>
-
-        <script>
-            function toggleMenu() {
-                const menu = document.getElementById('mobile-filters');
-                if (menu.classList.contains('hidden')) {
-                    menu.classList.remove('hidden');
-                    menu.classList.add('flex');
-                } else {
-                    menu.classList.add('hidden');
-                    menu.classList.remove('flex');
-                }
-            }
-        </script>
     </header>
 
     <div class="glass-panel p-4 mb-6 relative overflow-hidden">
@@ -239,17 +209,18 @@
     <div class="glass-panel p-6 mb-6 shadow-lg clickable-card">
         <h3 class="text-lg font-semibold mb-4 text-white flex justify-between">
             <span>Evolução Mensal</span>
+            <span class="text-xs text-gray-500 font-normal mt-1">(Clique no ponto para filtrar)</span>
         </h3>
         <div class="relative h-64"><canvas id="chartEvolucao"></canvas></div>
     </div>
 
     <div class="glass-panel p-6">
-        <div class="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
+        <div class="flex flex-col md:flex-row justify-between items-center mb-4 gap-3">
             <h3 class="text-lg font-semibold text-white">Extrato Detalhado</h3>
 
             <div class="w-full md:w-auto">
-                <select id="sel-mes-extrato" onchange="alterarFiltroMes(this.value)"
-                    class="bg-slate-800 text-white text-xs md:text-sm rounded-lg p-2 border border-slate-700 focus:ring-accent focus:border-accent block min-w-[150px]">
+                <select id="sel-mes-tabela" onchange="alterarFiltroMes(this.value)"
+                    class="w-full md:w-48 bg-slate-800 text-white text-xs rounded-lg p-2 border border-slate-600 focus:ring-accent focus:border-accent block">
                     <option value="">Todos os Meses</option>
                 </select>
             </div>
@@ -270,17 +241,15 @@
             </table>
         </div>
 
-        <div class="flex justify-between items-center mt-4 border-t border-slate-700/50 pt-4">
-            <span class="text-xs text-gray-400" id="info-paginacao">
-                Mostrando 0-0 de 0
-            </span>
+        <div class="flex justify-between items-center mt-4 border-t border-slate-700 pt-4">
+            <span id="page-info" class="text-xs text-gray-400">Página 1 de 1</span>
             <div class="flex gap-2">
-                <button onclick="mudarPagina(-1)" id="btn-ant" disabled
-                    class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs rounded border border-slate-700 transition">
+                <button id="btn-prev" onclick="mudarPagina(-1)" disabled
+                    class="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs rounded transition">
                     Anterior
                 </button>
-                <button onclick="mudarPagina(1)" id="btn-prox" disabled
-                    class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs rounded border border-slate-700 transition">
+                <button id="btn-next" onclick="mudarPagina(1)" disabled
+                    class="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs rounded transition">
                     Próximo
                 </button>
             </div>
