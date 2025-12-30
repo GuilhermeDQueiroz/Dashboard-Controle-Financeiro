@@ -49,6 +49,3 @@ MeuFinanceiro/
 ├── sw.js             # Service Worker (Cache & Offline support)
 ├── manifest.json     # Configuração do PWA (Ícones, cores, nome)
 │
-└── icons/            # Ativos gráficos
-    ├── icon-192.png
-    └── icon-512.png
